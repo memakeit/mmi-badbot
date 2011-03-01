@@ -1,0 +1,30 @@
+{{! mmi-badbot/templates/trap.mustache }}
+
+<!DOCTYPE html>
+<head>
+	<title>Welcome to the Blackhole!</title>
+	<link rel="stylesheet" href="{{{_url_root}}}/media/css/badbot.css" type="text/css">
+</head>
+<body>
+	<div id="blackhole">
+		<h1>You have fallen into a&nbsp;trap!</h1>
+		<p>
+			This site's <a href="{{{_url_root}}}/robots.txt">robots.txt</a> file explicitly forbids your presence at this location. 
+			The following WHOIS data will be reviewed carefully. If it is determined that you suck, you will be banned from this site. 
+		</p>
+		<p>
+			If you think this is a mistake, <em>now</em> is the time to 
+			<a href="http://twitter.com/#!/{{_twitter_username}}" title="{{_twitter_username}} on Twitter">contact me</a>.
+		</p>
+		<p>
+			<h3>Your IP Address is {{_ip}}</h3>
+			<pre>
+				WHOIS Lookup for {{_ip}}
+				{{_formatted_date}}
+
+				{{{_whois}}}
+			</pre>
+		</p>
+	</div>
+</body>
+</html>	
