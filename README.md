@@ -1,6 +1,6 @@
 # MMI BadBot Module
 
-This module is a bot trap to keep bad bots away from a web site.
+This module is a bot trap for keeping bad bots away from a web site.
 
 ## Dependencies
 
