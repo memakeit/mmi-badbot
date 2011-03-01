@@ -1,6 +1,7 @@
 # MMI BadBot Module
 
 This module is a bot trap for keeping bad bots away from a web site.
+This is a Kohana 3.0.x module, but a 3.1.x version is in the works. 
 
 ## Dependencies
 
