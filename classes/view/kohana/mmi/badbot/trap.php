@@ -3,6 +3,7 @@
  * Bad bot trap view.
  *
  * @package		MMI BadBot
+ * @category	view
  * @author		Me Make It
  * @copyright	(c) 2011 Me Make It
  * @license		ISC License (ISCL)

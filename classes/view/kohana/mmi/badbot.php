@@ -3,6 +3,7 @@
  * Base bad bot view.
  *
  * @package		MMI BadBot
+ * @category	view
  * @author		Me Make It
  * @copyright	(c) 2011 Me Make It
  * @license		ISC License (ISCL)
@@ -15,7 +16,7 @@ abstract class View_Kohana_MMI_BadBot extends Kostache
 	protected $_twitter_username;
 	
 	/**
-	 * @var string the root URL
+	 * @var string the root URL for the site
 	 **/
 	protected $_url_root;
 

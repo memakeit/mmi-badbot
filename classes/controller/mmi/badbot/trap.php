@@ -3,6 +3,7 @@
  * Bad bot trap controller.
  *
  * @package		MMI BadBot
+ * @category	controller
  * @author		Me Make It
  * @copyright	(c) 2011 Me Make It
  * @license		ISC License (ISCL)
@@ -35,7 +36,8 @@ class Controller_MMI_BadBot_Trap extends Controller
 	}
 	
 	/**
-	 * Process the bad bot and render the trap page.
+	 * Get the IP address, do the WHOIS lookup, and log the bad bot to the database.
+	 * If the bot is new, notify the webmaster.
 	 *
 	 * @access	protected
 	 * @return	void
@@ -48,7 +50,7 @@ class Controller_MMI_BadBot_Trap extends Controller
 		extract($_ENV);
 		$ip = $REMOTE_ADDR;
 		
-		// Check IP
+		// Check the IP
 		if ( ! MMI_BadBot::ip_valid($ip))
 		{
 			$this->_whois = "You did not specify a valid target host or IP.";
@@ -56,7 +58,7 @@ class Controller_MMI_BadBot_Trap extends Controller
 		}
 		$this->_ip = $ip;
 
-		// Check whitelist
+		// Check the whitelist
 		if (MMI_BadBot::in_whitelist(Request::$user_agent))
 		{
  			$this->_whois = "Luckily your user-agent was found in the whitelist.";
@@ -65,10 +67,11 @@ class Controller_MMI_BadBot_Trap extends Controller
 		
 		// Do the WHOIS lookup and log the IP address
 		$this->_whois = MMI_BadBot::whois($ip);
+		$exists = MMI_BadBot::exists($ip);
 		MMI_BadBot::log($ip);
-		if ( ! MMI_BadBot::exists($ip))
+		if ( ! $exists)
 		{
-			// If the IP address is new, alert by email
+			// If the bot is new, notify the webmaster
 			MMI_BadBot::send_email($ip, $this->_whois);
 		}
 	}

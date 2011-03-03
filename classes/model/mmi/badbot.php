@@ -3,6 +3,7 @@
  * Bad bot model.
  *
  * @package		MMI BadBot
+ * @category	model
  * @author		Me Make It
  * @copyright	(c) 2011 Me Make It
  * @license		ISC License (ISCL)
@@ -27,22 +28,17 @@ class Model_MMI_BadBot extends ORM
 	/**
 	 *@var array the validation rules
 	 */
-	protected $_rules = array
-	(
-		'ip' => array
-		(
+	protected $_rules = array(
+		'ip' => array(
 			'not_empty' => NULL,
 		),
-		'method' => array
-		(
+		'method' => array(
 			'not_empty' => NULL,
 		),
-		'protocol' => array
-		(
+		'protocol' => array(
 			'not_empty' => NULL,
 		),
-		'ua' => array
-		(
+		'ua' => array(
 			'not_empty' => NULL,
 		),
 	);

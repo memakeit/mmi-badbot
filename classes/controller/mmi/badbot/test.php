@@ -3,6 +3,7 @@
  * Base test controller.
  *
  * @package		MMI BadBot
+ * @category	controller
  * @author		Me Make It
  * @copyright	(c) 2011 Me Make It
  * @license		ISC License (ISCL)
