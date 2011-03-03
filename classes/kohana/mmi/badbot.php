@@ -51,8 +51,8 @@ class Kohana_MMI_BadBot
 	 */
 	public static function in_whitelist($user_agent)
 	{
-		$whitelist = MMI_BadBot::get_config()->get('whitelist', array());
-		if ($whitelist)
+		$whitelist = MMI_BadBot::get_config()->get('whitelist');
+		if (is_array($whitelist))
 		{
 			$whitelist = implode('|', $whitelist);
 	 		if (preg_match("/({$whitelist})/i", $user_agent)) 
@@ -79,7 +79,7 @@ class Kohana_MMI_BadBot
 	}
 	
 	/**
-	 * Check if an IP address is a bad bot.
+	 * Check if an IP address is in the bad bot database and is not allowed.
 	 *
 	 * @access	public
 	 * @param	string	the IP address
@@ -87,18 +87,17 @@ class Kohana_MMI_BadBot
 	 */
 	public static function deny($ip = NULL)
 	{
-		$deny = FALSE;
 		(empty($ip)) AND $ip = $_SERVER['REMOTE_ADDR'];
 		if ( ! empty($ip))
 		{
 			$ip = trim($ip);
-			$deny = ORM::factory('mmi_badbot', array('ip' => $ip, 'allowed' => 0))->loaded();
+			return ORM::factory('mmi_badbot', array('ip' => $ip, 'allowed' => 0))->loaded();
 		}
-		return $deny;
+		return FALSE;
 	}
 
 	/**
-	 * Check if an IP address exists in the database.
+	 * Check if an IP address is in the bad bot database.
 	 *
 	 * @access	public
 	 * @param	string	the IP address
@@ -106,18 +105,17 @@ class Kohana_MMI_BadBot
 	 */
 	public static function exists($ip = NULL)
 	{
-		$exists = FALSE;
 		(empty($ip)) AND $ip = $_SERVER['REMOTE_ADDR'];
 		if ( ! empty($ip))
 		{
 			$ip = trim($ip);
-			$exists = ORM::factory('mmi_badbot', array('ip' => $ip))->loaded();
+			RETURN ORM::factory('mmi_badbot', array('ip' => $ip))->loaded();
 		}
-		return $exists;
+		return FALSE;
 	}
 	
 	/**
-	 * Log a bad bot.
+	 * Log a bad bot to the database.
 	 *
 	 * @access	public
 	 * @param	string	the IP address
@@ -129,7 +127,8 @@ class Kohana_MMI_BadBot
 		$badbot = ORM::factory('mmi_badbot', array('ip' => $ip));
 		if ($badbot->loaded())
 		{
-			$badbot->hits = DB::expr('`hits` + 1');
+			// Increment the visit count
+			$badbot->visits = DB::expr('`visits` + 1');
 			try
 			{
 				$saved = $badbot->save();
@@ -148,18 +147,18 @@ class Kohana_MMI_BadBot
 			$ua = trim(Request::$user_agent, 255);
 			(empty($ua)) AND $ua = 'unknown';
 		
-			$badbot = ORM::factory('mmi_badbot')->values(array(
+			// Create a new bad bot entry 
+			$badbot->values(array(
 				'ip' => $ip,
 				'method' => $method,
 				'protocol' => $protocol,
 				'ua' => $ua,
 			));
-			$saved = FALSE;
 			if ($valid = $badbot->check())
 			{
 				try
 				{
-					$saved = $badbot->save();
+					$badbot->save();
 				}
 				catch (Exception $e)
 				{
@@ -175,7 +174,6 @@ class Kohana_MMI_BadBot
 	
 	/**
 	 * Lookup the WHOIS data.
-	 * 
 	 * @link	http://perishablepress.com/press/2010/07/14/blackhole-bad-bots/
 	 * 
 	 * @access	public
@@ -197,68 +195,65 @@ class Kohana_MMI_BadBot
 		
 		if ( ! $ip = gethostbyname($ip)) 
 		{
-			$msg .= "Can't do a WHOIS lookup without an IP address.";
+			return "Can't do a WHOIS lookup without an IP address.";
 		} 
-		else 
+		
+		$buffer = '';
+		$sock = NULL;
+		try
 		{
-			$buffer = '';
-			$sock = NULL;
-			try
+			$sock = fsockopen($server, 43, $num, $error, 20);
+		}
+		catch (Exception $e)
+		{
+			unset($sock);
+			Kohana::$log->add(Kohana::ERROR, Kohana::exception_text($e));
+		}
+		if ( ! $sock) 
+		{
+			unset($sock);
+			return "Timed out connecting to {$server} (port 43).";
+		} 
+		
+		try
+		{
+			fputs($sock, "{$code}{$ip}{$extra}\n");
+			while ( ! feof($sock))
 			{
-				$sock = fsockopen($server, 43, $num, $error, 20);
+				$buffer .= fgets($sock, 10240);
 			}
-			catch (Exception $e)
+			fclose($sock);
+		}
+		catch (Exception $e)
+		{
+			unset($sock);
+			Kohana::$log->add(Kohana::ERROR, Kohana::exception_text($e));
+		}
+		
+		if ( ! empty($buffer))
+		{
+			$buffer = mb_convert_encoding($buffer, 'UTF-8', mb_detect_encoding($buffer, 'UTF-8, ISO-8859-1', TRUE));
+			$msg .= nl2br($buffer);	
+		}
+		
+		// Check if an additional WHOIS lookup is necessary
+		if ($server === self::ARIN)
+		{
+			$extra = '';
+			$server = '';
+			foreach (self::$_server_map as $search => $server_settings)
 			{
-				unset($sock);
-				Kohana::$log->add(Kohana::ERROR, Kohana::exception_text($e));
-			}
-			if ( ! $sock) 
-			{
-				unset($sock);
-				$msg .= "Timed out connecting to {$server} (port 43).";
+				if (preg_match("/{$search}/", $buffer)) 
+				{
+					$extra = Arr::get($server_settings, 'extra', '');
+					$server = $server_settings['server'];
+					break;
+				}
 			} 
-			else 
+			if ( ! empty($server)) 
 			{
-				try
-				{
-					fputs($sock, "{$code}{$ip}{$extra}\n");
-					while ( ! feof($sock))
-					{
-						$buffer .= fgets($sock, 10240);
-					}
-					fclose($sock);
-				}
-				catch (Exception $e)
-				{
-					unset($sock);
-					Kohana::$log->add(Kohana::ERROR, Kohana::exception_text($e));
-				}
-			}
-			if ( ! empty($buffer))
-			{
-				$buffer = mb_convert_encoding($buffer, 'UTF-8', mb_detect_encoding($buffer, 'UTF-8, ISO-8859-1', TRUE));
-				$msg .= nl2br($buffer);	
-			}
-			
-			// Check if an additional WHOIS lookup is necessary
-			if ($server === self::ARIN)
-			{
-				$extra = '';
-				$server = '';
-				foreach (self::$_server_map as $search => $server_settings)
-				{
-					if (preg_match("/{$search}/", $buffer)) 
-					{
-						$extra = Arr::get($server_settings, 'extra', '');
-						$server = $server_settings['server'];
-						break;
-					}
-				} 
-				if ( ! empty($server)) 
-				{
-					$msg .= "\nDeferred to specific whois server: {$server} ...\n\n";
-					$msg .= self::whois($ip, $server, $extra);
-				}
+				$msg .= "\nDeferred to specific whois server: {$server} ...\n\n";
+				$msg .= self::whois($ip, $server, $extra);
 			}
 		}
 		return trim(preg_replace("/#/", " ", strip_tags($msg)));
