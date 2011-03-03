@@ -11,16 +11,6 @@
 class Controller_MMI_BadBot_Trap extends Controller
 {
 	/**
-	 * @var string the IP address
-	 **/
-	protected $_ip;
-	
-	/**
-	 * @var string the WHOIS data
-	 **/
-	protected $_whois;
-	
-	/**
 	 * Process the bad bot and render the trap page.
 	 *
 	 * @access	public
@@ -28,51 +18,10 @@ class Controller_MMI_BadBot_Trap extends Controller
 	 */
 	public function action_index()
 	{
-		$this->_process();
+		MMI_BadBot::process($ip, $whois);
 		$this->request->response = Kostache::factory('mmi/badbot/trap')->set(array(
-			'ip' => $this->_ip,
-			'whois' => $this->_whois,
+			'ip' => $ip,
+			'whois' => $whois,
 		))->render();
-	}
-	
-	/**
-	 * Get the IP address, do the WHOIS lookup, and log the bad bot to the database.
-	 * If the bot is new, notify the webmaster.
-	 *
-	 * @access	protected
-	 * @return	void
-	 */
-	protected function _process()
-	{
-		extract($_POST);
-		extract($_GET);
-		extract($_SERVER);
-		extract($_ENV);
-		$ip = $REMOTE_ADDR;
-		
-		// Check the IP
-		if ( ! MMI_BadBot::ip_valid($ip))
-		{
-			$this->_whois = "You did not specify a valid target host or IP.";
-			return;
-		}
-		$this->_ip = $ip;
-
-		// Check the whitelist
-		if (MMI_BadBot::in_whitelist(Request::$user_agent))
-		{
- 			$this->_whois = "Luckily your user-agent was found in the whitelist.";
- 			return;
-		}
-		
-		// Do the WHOIS lookup and log the IP address
-		$this->_whois = MMI_BadBot::whois($ip);
-		$exists = MMI_BadBot::exists($ip);
-		MMI_BadBot::log($ip);
-		if ( ! $exists)
-		{
-			// If the bot is new, notify the webmaster
-			MMI_BadBot::send_email($ip, $this->_whois);
-		}
 	}
 } // End Controller_MMI_BadBot_Trap

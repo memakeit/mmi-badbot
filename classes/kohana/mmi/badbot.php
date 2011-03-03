@@ -31,13 +31,87 @@ class Kohana_MMI_BadBot
   	);
 	
 	/**
-	 * Check if an IP address is valid.
+	 * If it is a bad bot, redirect to the denied page.
 	 *
 	 * @access	public
+	 * @return	void
+	 */
+	public static function check()
+	{
+		if (self::_deny())
+		{
+			$url = Route::url('mmi/badbot/denied', NULL, TRUE);
+			Request::instance()->redirect($url);
+		}
+	}
+	
+	/**
+	 * Get the IP address, do the WHOIS lookup, and log the bad bot to the database.
+	 * If the bot is new, notify the webmaster.
+	 *
+	 * @access	protected
+	 * @param	string	the IP address
+	 * @param	string	the WHOIS data
+	 * @return	void
+	 */
+	public static function process(& $ip, & $whois)
+	{
+		extract($_POST);
+		extract($_GET);
+		extract($_SERVER);
+		extract($_ENV);
+		$ip = $REMOTE_ADDR;
+		
+		// Check the IP
+		if ( ! self::_ip_valid($ip))
+		{
+			$whois = "You did not specify a valid target host or IP.";
+			return;
+		}
+
+		// Check the whitelist
+		if (self::_in_whitelist(Request::$user_agent))
+		{
+ 			$whois = "Luckily your user-agent was found in the whitelist.";
+ 			return;
+		}
+		
+		// Do the WHOIS lookup and log the IP address
+		$whois = self::_whois($ip);
+		$exists = self::_exists($ip);
+		self::_log($ip);
+		if ( ! $exists)
+		{
+			// If the bot is new, notify the webmaster
+			self::_send_email($ip, $whois);
+		}
+	}
+	
+	/**
+	 * Get the configuration settings.
+	 *
+	 * @access	public
+	 * @param	boolean	return the configuration as an array?
+	 * @return	mixed
+	 */
+	public static function get_config($as_array = FALSE)
+	{
+		(self::$_config === NULL) AND self::$_config = Kohana::config('mmi-badbot');
+		if ($as_array)
+		{
+			return self::$_config->as_array();
+		}
+		return self::$_config;
+	}
+	
+	/**
+	 * Check if an IP address is valid.
+	 *
+	 * @access	protected
 	 * @param	string	the IP address
 	 * @return	boolean	is the address valid?
 	 */
-	public static function ip_valid($ip)
+	protected static function _ip_valid($ip)
 	{
 		return ($ip AND Validate::ip($ip)); 
 	}
@@ -45,13 +119,13 @@ class Kohana_MMI_BadBot
 	/**
 	 * Check if a user-agent is in the whitelist.
 	 *
-	 * @access	public
+	 * @access	protected
 	 * @param	string	the user-agent
 	 * @return	boolean	is it in the whitelist?
 	 */
-	public static function in_whitelist($user_agent)
+	protected static function _in_whitelist($user_agent)
 	{
-		$whitelist = MMI_BadBot::get_config()->get('whitelist');
+		$whitelist = self::get_config()->get('whitelist');
 		if (is_array($whitelist))
 		{
 			$whitelist = implode('|', $whitelist);
@@ -62,30 +136,15 @@ class Kohana_MMI_BadBot
 		}
 		return FALSE;
 	}
-
-	/**
-	 * If it is a bad bot, redirect to the denied page.
-	 *
-	 * @access	public
-	 * @return	void
-	 */
-	public static function check()
-	{
-		if (self::deny())
-		{
-			$url = Route::url('mmi/badbot/denied', NULL, TRUE);
-			Request::instance()->redirect($url);
-		}
-	}
 	
 	/**
 	 * Check if an IP address is in the bad bot database and is not allowed.
 	 *
-	 * @access	public
+	 * @access	protected
 	 * @param	string	the IP address
 	 * @return	boolean	deny the address?
 	 */
-	public static function deny($ip = NULL)
+	protected static function _deny($ip = NULL)
 	{
 		(empty($ip)) AND $ip = $_SERVER['REMOTE_ADDR'];
 		if ( ! empty($ip))
@@ -99,11 +158,11 @@ class Kohana_MMI_BadBot
 	/**
 	 * Check if an IP address is in the bad bot database.
 	 *
-	 * @access	public
+	 * @access	protected
 	 * @param	string	the IP address
 	 * @return	boolean	does the address exist?
 	 */
-	public static function exists($ip = NULL)
+	protected static function _exists($ip = NULL)
 	{
 		(empty($ip)) AND $ip = $_SERVER['REMOTE_ADDR'];
 		if ( ! empty($ip))
@@ -115,74 +174,16 @@ class Kohana_MMI_BadBot
 	}
 	
 	/**
-	 * Log a bad bot to the database.
-	 *
-	 * @access	public
-	 * @param	string	the IP address
-	 * @return	void
-	 */
-	public static function log($ip = NULL)
-	{
-		(empty($ip)) AND $ip = $_SERVER['REMOTE_ADDR'];
-		$badbot = ORM::factory('mmi_badbot', array('ip' => $ip));
-		if ($badbot->loaded())
-		{
-			// Increment the visit count
-			$badbot->visits = DB::expr('`visits` + 1');
-			try
-			{
-				$saved = $badbot->save();
-			}
-			catch (Exception $e)
-			{
-				Kohana::$log->add(Kohana::ERROR, Kohana::exception_text($e));
-			}
-		}
-		else
-		{
-			$method = $_SERVER['REQUEST_METHOD']; 
-			(empty($method)) AND $method = 'GET';
-			$protocol = $_SERVER['SERVER_PROTOCOL'];
-			(empty($protocol)) AND $protocol = 'HTTP/1.1';
-			$ua = trim(Request::$user_agent, 255);
-			(empty($ua)) AND $ua = 'unknown';
-		
-			// Create a new bad bot entry 
-			$badbot->values(array(
-				'ip' => $ip,
-				'method' => $method,
-				'protocol' => $protocol,
-				'ua' => $ua,
-			));
-			if ($valid = $badbot->check())
-			{
-				try
-				{
-					$badbot->save();
-				}
-				catch (Exception $e)
-				{
-					Kohana::$log->add(Kohana::ERROR, Kohana::exception_text($e));
-				}
-			}
-			else
-			{
-				Kohana::$log->add(Kohana::ERROR, 'Invalid bad bot:'.Kohana::debug($badbot->as_array()));
-			}
-		}
-	}
-	
-	/**
 	 * Lookup the WHOIS data.
 	 * @link	http://perishablepress.com/press/2010/07/14/blackhole-bad-bots/
 	 * 
-	 * @access	public
+	 * @access	protected
 	 * @param	string	the IP address
 	 * @param	string	the WHOIS server
 	 * @param	string	extra parameters for the WHOIS request
 	 * @return	string	the WHOIS data
 	 */
-	public static function whois($ip, $server = NULL, $extra = '') 
+	protected static function _whois($ip, $server = NULL, $extra = '') 
 	{
 		$code = '';
 		$msg = '';
@@ -258,16 +259,74 @@ class Kohana_MMI_BadBot
 		}
 		return trim(preg_replace("/#/", " ", strip_tags($msg)));
 	}
+
+	/**
+	 * Log a bad bot to the database.
+	 *
+	 * @access	protected
+	 * @param	string	the IP address
+	 * @return	void
+	 */
+	protected static function _log($ip = NULL)
+	{
+		(empty($ip)) AND $ip = $_SERVER['REMOTE_ADDR'];
+		$badbot = ORM::factory('mmi_badbot', array('ip' => $ip));
+		if ($badbot->loaded())
+		{
+			// Increment the visit count
+			$badbot->visits = DB::expr('`visits` + 1');
+			try
+			{
+				$saved = $badbot->save();
+			}
+			catch (Exception $e)
+			{
+				Kohana::$log->add(Kohana::ERROR, Kohana::exception_text($e));
+			}
+		}
+		else
+		{
+			$method = $_SERVER['REQUEST_METHOD']; 
+			(empty($method)) AND $method = 'GET';
+			$protocol = $_SERVER['SERVER_PROTOCOL'];
+			(empty($protocol)) AND $protocol = 'HTTP/1.1';
+			$ua = trim(Request::$user_agent, 255);
+			(empty($ua)) AND $ua = 'unknown';
 		
+			// Create a new bad bot entry 
+			$badbot->values(array(
+				'ip' => $ip,
+				'method' => $method,
+				'protocol' => $protocol,
+				'ua' => $ua,
+			));
+			if ($valid = $badbot->check())
+			{
+				try
+				{
+					$badbot->save();
+				}
+				catch (Exception $e)
+				{
+					Kohana::$log->add(Kohana::ERROR, Kohana::exception_text($e));
+				}
+			}
+			else
+			{
+				Kohana::$log->add(Kohana::ERROR, 'Invalid bad bot:'.Kohana::debug($badbot->as_array()));
+			}
+		}
+	}
+
 	/**
 	 * Send an email containing details about the bad bot.
 	 *
-	 * @access	public
+	 * @access	protected
 	 * @param	string	the IP address
 	 * @param	string	the WHOIS data
 	 * @return	void
 	 */
-	public static function send_email($ip, $whois)
+	protected static function _send_email($ip, $whois)
 	{
 		$datestamp = date("l, F jS Y @ H:i:s");
 		$msg =<<<EOL
@@ -303,22 +362,5 @@ EOL;
 		{
 			Kohana::$log->add(Kohana::ERROR, Kohana::exception_text($e));
 		}
-	}
-	
-	/**
-	 * Get the configuration settings.
-	 *
-	 * @access	public
-	 * @param	boolean	return the configuration as an array?
-	 * @return	mixed
-	 */
-	public static function get_config($as_array = FALSE)
-	{
-		(self::$_config === NULL) AND self::$_config = Kohana::config('mmi-badbot');
-		if ($as_array)
-		{
-			return self::$_config->as_array();
-		}
-		return self::$_config;
 	}
 } // End Kohana_MMI_BadBot
