@@ -1,4 +1,4 @@
-CREATE  TABLE IF NOT EXISTS `noterfy`.`mmi_badbots` (
+CREATE TABLE IF NOT EXISTS `mmi_badbots` (
   `id` INT(11) UNSIGNED NOT NULL AUTO_INCREMENT ,
   `ip` VARCHAR(15) NOT NULL ,
   `method` VARCHAR(8) NOT NULL DEFAULT 'GET' ,
